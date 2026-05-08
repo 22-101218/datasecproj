@@ -1,66 +1,179 @@
-# Blockchain-Based Vehicle Ownership System
+# 🚗 VehicleChain — Blockchain Vehicle Ownership System
 
-A blockchain-powered vehicle registry using Ganache + Python.
+A full-stack desktop application for managing vehicle ownership on the Ethereum blockchain. Built with Python, Solidity, and PyQt5, it provides a modern GUI, PDF certificate generation, VIN validation, CSV audit logging, and real-time event monitoring — all backed by a local Ganache blockchain.
 
-## Project layout
+---
 
-| Path | Purpose |
-|------|---------|
-| `vehiclechain/` | Python package (GUI, CLI, blockchain, PDF, audit) |
-| `vehiclechain/gui.py` | PyQt5 desktop application |
-| `vehiclechain/cli.py` | Terminal menu |
-| `vehiclechain/blockchain.py` | Web3.py + contract helpers |
-| `contracts/VehicleOwnership.sol` | Solidity source |
-| `assets/car_logo.png` | Window / PDF logo (replace with your artwork) |
-| `app.py` | Shortcut: runs the text CLI |
-| `VehicleChain.spec` | PyInstaller definition |
-| `build_exe.ps1` | Builds `dist/VehicleChain.exe` |
+## ✨ Features
 
-## Setup
+| Feature | Description |
+|---|---|
+| 🔗 **Blockchain Registry** | Register vehicles and transfer ownership via a Solidity smart contract |
+| 🖥️ **Desktop GUI** | Full PyQt5 interface with a futuristic dark/violet theme |
+| 📄 **PDF Certificates** | Auto-generate ownership certificates with QR code and branding |
+| 🔍 **VIN Validator** | Validates real 17-character VINs or custom vehicle IDs |
+| 📋 **Audit Log** | Every action is recorded to `audit_log.csv` automatically |
+| ⚡ **Live Event Feed** | Real-time blockchain event listener in the GUI |
+| 🔐 **Role-Based Access** | Authority and Verifier roles enforced on-chain |
+| 🏠 **Ownership History** | Immutable on-chain timeline of all past owners |
 
+---
+
+## 🗂️ Project Structure
+
+```
+datasecproj/
+│
+├── contracts/
+│   └── VehicleOwnership.sol      # Solidity smart contract (Solidity ^0.8.19)
+│
+├── vehiclechain/                 # Main Python package
+│   ├── __main__.py               # Entry point (python -m vehiclechain)
+│   ├── gui.py                    # PyQt5 desktop GUI
+│   ├── cli.py                    # Terminal CLI menu
+│   ├── blockchain.py             # Web3.py + contract interaction helpers
+│   ├── pdf_cert.py               # PDF certificate generator (ReportLab + QR)
+│   ├── audit_log.py              # CSV audit logging
+│   ├── vin_utils.py              # VIN validation logic
+│   └── paths.py                  # Path resolution for bundled/dev environments
+│
+├── VehicleOwnershipSystem/       # Original base project
+│   ├── contracts/VehicleOwnership.sol
+│   ├── main.py
+│   └── requirements.txt
+│
+├── assets/
+│   ├── car_logo.png              # App logo (GUI + PDF)
+│   └── car_logo.ico              # Windows icon
+│
+├── app.py                        # Shortcut: launches the CLI
+├── requirements.txt              # Python dependencies
+├── VehicleChain.spec             # PyInstaller build config
+└── README.md
+```
+
+---
+
+## ⚙️ Prerequisites
+
+- **Python 3.10+**
+- **[Ganache](https://trufflesuite.com/ganache/)** — local Ethereum blockchain (GUI or CLI)
+- **Node.js** (only needed if using Truffle/Hardhat for contract deployment)
+
+---
+
+## 🚀 Setup & Installation
+
+### 1. Clone the repository
+```bash
+git clone https://github.com/22-101218/datasecproj.git
+cd datasecproj
+```
+
+### 2. Install Python dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run (GUI)
+### 3. Start Ganache
+Launch **Ganache** and ensure it is running on:
+```
+http://127.0.0.1:7545
+```
 
-1. Start **Ganache** on `http://127.0.0.1:7545`
-2. From this folder:
+---
 
+## ▶️ Running the App
+
+### GUI (Recommended)
 ```bash
 python -m vehiclechain
 ```
 
-## Run (CLI)
-
+### CLI (Terminal menu)
 ```bash
 python app.py
 ```
 
-## Windows executable
+---
+
+## 🖥️ GUI Panels
+
+| Panel | Description |
+|---|---|
+| **Dashboard** | Live block number, connection status, and available accounts |
+| **Deploy Contract** | Compile and deploy the smart contract with one click |
+| **Register Vehicle** | Register a new vehicle using a real VIN or custom ID |
+| **Transfer Ownership** | Securely transfer a vehicle to a new owner (owner-only) |
+| **Verify Owner** | Public lookup of current owner by vehicle ID |
+| **Vehicle Details** | Full vehicle info card (brand, model, owner, timestamp) |
+| **Ownership History** | Complete immutable transfer history from the blockchain |
+| **PDF Certificate** | Generate a signed PDF ownership certificate with QR code |
+| **Live Events** | Real-time feed of blockchain events as they happen |
+| **Audit Log** | View all logged actions from `audit_log.csv` |
+| **Set Verifier** | Grant or revoke the verifier role for an address |
+
+---
+
+## 📜 Smart Contract Overview
+
+**`contracts/VehicleOwnership.sol`** — Solidity `^0.8.19`
+
+### Key Roles
+- **Authority** — the deploying address; can register vehicles and manage verifiers
+- **Verifier** — can call `verifyOwnershipByVerifier()` and emit a verification event
+
+### Core Functions
+
+| Function | Access | Description |
+|---|---|---|
+| `registerVehicle(id, brand, model, owner)` | Authority only | Register a new vehicle |
+| `transferOwnership(id, newOwner)` | Current owner only | Transfer to new owner |
+| `verifyCurrentOwner(id)` | Public (view) | Returns current owner address |
+| `verifyOwnershipByVerifier(id)` | Verifier only | Emits `OwnershipVerified` event |
+| `getVehicle(id)` | Public (view) | Returns full vehicle details |
+| `getOwnershipHistory(id)` | Public (view) | Returns all past owner records |
+| `setVerifier(address, bool)` | Authority only | Grant/revoke verifier role |
+
+### Events
+- `VehicleRegistered`
+- `OwnershipTransferred`
+- `OwnershipVerified`
+- `VerifierUpdated`
+
+---
+
+## 📦 Dependencies
+
+```
+web3==6.20.2
+py-solc-x==2.0.3
+PyQt5
+reportlab
+qrcode[pil]
+Pillow
+pyinstaller>=6.0
+```
+
+---
+
+## 🏗️ Building the Windows Executable
 
 ```powershell
 pip install pyinstaller
 pyinstaller --noconfirm VehicleChain.spec
 ```
 
-(Or run `.\build_exe.ps1` — it also copies `assets\car_logo.png` to `dist\assets\` next to the exe, like the old `app_qt.py` + `assets` folder.) Output: `dist\VehicleChain.exe`. Start **Ganache** on `http://127.0.0.1:7545` first.
+Output: `dist\VehicleChain.exe`
 
-Generated files when using the `.exe` (same folder as the executable):
+> Make sure Ganache is running on `http://127.0.0.1:7545` before launching the `.exe`.
 
-- `audit_log.csv`
-- `certificate_<id>.pdf`
+**Generated files (same folder as the executable):**
+- `audit_log.csv` — CSV log of all actions
+- `certificate_<vehicleId>.pdf` — PDF ownership certificates
 
-## GUI panels (Qt)
+---
 
-- **Dashboard** — live block number, connection status, accounts
-- **Deploy Contract** — compile + deploy with one click
-- **Register Vehicle** — supports real VINs and custom IDs
-- **Transfer Ownership** — secure owner-only transfer
-- **Verify Owner** — public lookup by vehicle ID
-- **Vehicle Details** — full vehicle card
-- **Ownership History** — immutable on-chain timeline
-- **PDF Certificate** — generates `certificate_<id>.pdf` with QR code
-- **Live Events** — real-time blockchain event feed
-- **Audit Log** — every action logged to `audit_log.csv`
-- **Set Verifier** — grant/revoke verifier role
+## 📄 License
+
+This project was developed as an academic submission. All rights reserved.
