@@ -69,7 +69,7 @@ Provides blockchain abstraction layer with functions for:
 
 1. Clone the repository
 ```bash
-git clone <repository-url>
+git clone <https://github.com/22-101218/datasecproj.git>
 cd datasec
 ```
 
@@ -282,56 +282,3 @@ pyinstaller VehicleChain.spec
 
 Output: `dist/VehicleChain.exe`
 
-## Troubleshooting
-
-### "Unable to connect to Ganache"
-
-- Ensure Ganache is running: `ganache --deterministic`
-- Verify connection URL: http://127.0.0.1:7545
-- Check firewall settings
-
-### "Sender account not recognized"
-
-- Address is not a valid Ganache account
-- Import address into Ganache or use an existing account
-- Use first account (0x) for authority operations
-
-### "Insufficient funds for gas"
-
-- Account has insufficient balance
-- Ganache provides starting balance - check account history
-- Use fresh Ganache instance if needed
-
-### Application crashes on startup
-
-- Check Python version: 3.10+
-- Verify all dependencies installed: `pip install -r requirements.txt`
-- Check file permissions, especially in OneDrive directories
-
-### Certificate generation fails
-
-- Check if reportlab is installed: `pip install reportlab`
-- Verify vehicle ID exists and has history
-- Check disk space for PDF output
-
-## License
-
-This project is provided for educational and research purposes.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review audit logs for detailed transaction information
-3. Verify Ganache connection status
-4. Check input validation messages
-
-## Requirements Compliance
-
-This system fully implements:
-
-- **Requirement 6**: Role-based access control (Authority, Owner, Verifier)
-- **Requirement 7**: Ownership verification process (public verify + history)
-- **Requirement 8**: Immutability and transparency (blockchain-stored records + audit trail)
-
-All data is permanently recorded on the blockchain with no modification or deletion capabilities.
