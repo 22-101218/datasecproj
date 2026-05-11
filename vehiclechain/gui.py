@@ -2,24 +2,21 @@ import os
 import sys, threading, time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
+from web3 import Web3
 from vehiclechain.audit_log import get_log_path, log_action, read_log
-from vehiclechain.blockchain import (
-    deploy_contract,
-    get_authority_address,
-    get_contract,
-    get_history,
-    get_vehicle,
-    register_vehicle,
-    set_verifier,
-    transfer_ownership,
-    verify_owner,
-    w3,
-)
 from vehiclechain.paths import logo_path
 from vehiclechain.vin_utils import validate_vehicle_id
+
+try:
+    import vehiclechain.blockchain as bc
+    _BLOCKCHAIN_ERROR: Optional[Exception] = None
+except Exception as exc:
+    bc = None
+    _BLOCKCHAIN_ERROR = exc
 
 
 def pixmap_from_png(path: Path) -> QPixmap:
@@ -291,6 +288,82 @@ QSplitter::handle {
 }
 """
 
+def _blockchain_error_text() -> str:
+    if _BLOCKCHAIN_ERROR is not None:
+        return str(_BLOCKCHAIN_ERROR)
+    return "Ganache is not running or is unreachable."
+
+
+def _require_blockchain(box, action: str) -> bool:
+    if bc is None:
+        if box is not None:
+            show(box, f"Error: {action} unavailable. {_blockchain_error_text()}")
+        return False
+    try:
+        if not bc.w3.is_connected():
+            msg = "Unable to connect to Ganache at http://127.0.0.1:7545. Start Ganache and try again."
+            if box is not None:
+                show(box, f"Error: {msg}")
+            return False
+    except Exception as exc:
+        if box is not None:
+            show(box, f"Error: {exc}")
+        return False
+    return True
+
+
+def _require_address(box: QTextEdit, label: str, addr: str) -> bool:
+    if not addr:
+        show(box, f"Error: {label} is required.")
+        return False
+    if not Web3.is_address(addr):
+        show(box, f"Error: {label} must be a valid 0x address.")
+        return False
+    return True
+
+
+def _require_ganache_account(box: QTextEdit, label: str, addr: str) -> bool:
+    """Check if address is a valid unlocked Ganache account."""
+    if not _require_address(box, label, addr):
+        return False
+    if not bc.is_valid_ganache_account(addr):
+        show(box, f"Error: {label} is not an unlocked Ganache account. Check your address.")
+        return False
+    return True
+
+
+def _require_vehicle_id(box: QTextEdit, vehicle_id: str) -> bool:
+    """Validate vehicle ID format."""
+    result = validate_vehicle_id(vehicle_id)
+    if not result.valid:
+        show(box, f"Error: {result.message}")
+        return False
+    return True
+
+
+def _format_error(error_str: str) -> str:
+    """Extract clean error message from exception."""
+    msg = str(error_str)
+    if "sender account not recognized" in msg:
+        return "The sender account was not recognized. Check the address."
+    elif "insufficient funds" in msg.lower():
+        return "Insufficient funds for gas."
+    elif "revert" in msg.lower():
+        return "Transaction reverted. Check your inputs and permissions."
+    else:
+        first_line = msg.split("\n")[0]
+        return first_line[:200]
+
+
+def _safe_block_number() -> str:
+    try:
+        if bc is not None:
+            return str(bc.w3.eth.block_number)
+    except Exception:
+        pass
+    return "—"
+
+
 def ts(u):
     try: return datetime.utcfromtimestamp(u).strftime("%Y-%m-%d %H:%M:%S UTC")
     except: return str(u)
@@ -408,15 +481,28 @@ class DashPanel(QWidget):
 
     def refresh(self):
         try:
-            ok=w3.is_connected(); block=w3.eth.block_number if ok else "—"
+            if bc is None:
+                raise RuntimeError(_blockchain_error_text())
+            ok = bc.w3.is_connected()
+            block = bc.w3.eth.block_number if ok else "—"
             self.conn_card[1].setText("Connected" if ok else "Offline")
             self.conn_card[1].setStyleSheet(f"color:{'#2E7D32' if ok else '#D32F2F'};font-size:16px;font-weight:700;")
             self.block_card[1].setText(str(block))
-            auth = get_authority_address().lower()
+            if not ok:
+                self.acc_table.setRowCount(0)
+                self.acc_table.insertRow(0)
+                self.acc_table.setItem(0, 0, QTableWidgetItem("—"))
+                self.acc_table.setItem(0, 1, QTableWidgetItem("Disconnected"))
+                self.acc_table.setItem(0, 2, QTableWidgetItem(""))
+                self.acc_table.setItem(0, 3, QTableWidgetItem("Start Ganache to load accounts."))
+                self.contract_lbl.setText("Contract: not connected")
+                self.contract_lbl.setStyleSheet("color:#78909C;font-size:13px;")
+                return
+            auth = bc.get_authority_address().lower()
             self.acc_table.setRowCount(0)
-            for i, a in enumerate(w3.eth.accounts):
-                wei = w3.eth.get_balance(a)
-                eth = float(w3.from_wei(wei, "ether"))
+            for i, a in enumerate(bc.w3.eth.accounts):
+                wei = bc.w3.eth.get_balance(a)
+                eth = float(bc.w3.from_wei(wei, "ether"))
                 is_auth = a.lower() == auth
                 note = "Pays deploy, register, set verifier" if is_auth else ""
                 r = self.acc_table.rowCount()
@@ -435,7 +521,7 @@ class DashPanel(QWidget):
                             f.setBold(True)
                             it.setFont(f)
                             it.setForeground(QBrush(QColor("#C62828")))
-            try: self.contract_lbl.setText(f"Contract deployed: {get_contract().address}"); self.contract_lbl.setStyleSheet("color:#2E7D32;font-size:13px;")
+            try: self.contract_lbl.setText(f"Contract deployed: {bc.get_contract().address}"); self.contract_lbl.setStyleSheet("color:#2E7D32;font-size:13px;")
             except: self.contract_lbl.setText("Contract: not deployed yet"); self.contract_lbl.setStyleSheet("color:#78909C;font-size:13px;")
         except Exception as e:
             self.acc_table.setRowCount(0)
@@ -456,13 +542,24 @@ class DeployPanel(QWidget):
         lay.addStretch(); self.setLayout(QVBoxLayout()); self.layout().addWidget(scroll_wrap(w))
 
     def go(self):
+        if not _require_blockchain(self.out, "Deploy Contract"):
+            return
         show(self.out,"Compiling Solidity contract… please wait."); QApplication.processEvents()
-        def fn(): return deploy_contract()
+        def fn(): return bc.deploy_contract()
         self._w=Worker(fn); self._w.result.connect(self.done); self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
 
-    def done(self,addr):
-        log_action("DEPLOY",notes=f"Contract at {addr}")
-        show(self.out,f"Smart contract deployed.\n\n  Address  : {addr}\n  Block    : #{w3.eth.block_number}\n  Chain ID : 1337\n  Deployer : {w3.eth.accounts[0]}\n\n  The authority is now locked — access control is active.\n  Next: Register Vehicle")
+    def done(self,result):
+        addr, tx_hash = result
+        log_action("DEPLOY",tx_hash=tx_hash,notes=f"Contract at {addr}")
+        block = "—"
+        deployer = "—"
+        try:
+            if bc is not None:
+                block = bc.w3.eth.block_number
+                deployer = bc.w3.eth.accounts[0]
+        except Exception:
+            pass
+        show(self.out,f"Smart contract deployed.\n\n  Address  : {addr}\n  Block    : #{block}\n  Chain ID : 1337\n  Deployer : {deployer}\n\n  The authority is now locked — access control is active.\n  Next: Register Vehicle")
 
 
 class RegisterPanel(QWidget):
@@ -494,17 +591,20 @@ class RegisterPanel(QWidget):
         self.badge.setStyleSheet(f"color:{col};font-size:12px;")
 
     def go(self):
+        if not _require_blockchain(self.out, "Register Vehicle"):
+            return
         vid=self.fields["vid"].text().strip(); brand=self.fields["brand"].text().strip()
         model=self.fields["model"].text().strip(); owner=self.fields["owner"].text().strip()
         r=validate_vehicle_id(vid)
         if not r.valid: show(self.out,f"Error: {r.message}"); return
         if not all([brand,model,owner]): show(self.out,"All fields required."); return
+        if not _require_ganache_account(self.out, "Owner address", owner): return
         show(self.out,"Sending transaction…"); QApplication.processEvents()
-        def fn(): return register_vehicle(vid,brand,model,owner)
+        def fn(): return bc.register_vehicle(vid,brand,model,owner)
         self._w=Worker(fn)
-        self._w.result.connect(lambda tx: (log_action("REGISTER",vid,owner,str(tx),w3.eth.block_number),
-            show(self.out,f"Vehicle registered.\n\n  Vehicle ID  : {vid}  [{r.mode}]\n  Brand/Model : {brand} {model}\n  Owner       : {owner}\n  TX Hash     : {tx}\n  Block #     : {w3.eth.block_number}\n\n  This record is permanently immutable on the blockchain.")))
-        self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
+        self._w.result.connect(lambda tx: (log_action("REGISTER",vid,owner,str(tx),_safe_block_number()),
+            show(self.out,f"Vehicle registered.\n\n  Vehicle ID  : {vid}  [{r.mode}]\n  Brand/Model : {brand} {model}\n  Owner       : {owner}\n  TX Hash     : {tx}\n  Block #     : {_safe_block_number()}\n\n  This record is permanently immutable on the blockchain.")))
+        self._w.error.connect(lambda e: show(self.out,f"Error: {_format_error(e)}")); self._w.start()
 
 
 class TransferPanel(QWidget):
@@ -518,14 +618,19 @@ class TransferPanel(QWidget):
         lay.addStretch(); self.setLayout(QVBoxLayout()); self.layout().addWidget(scroll_wrap(w))
 
     def go(self):
+        if not _require_blockchain(self.out, "Transfer Ownership"):
+            return
         vid=self.fields["vid"].text().strip(); cur=self.fields["cur"].text().strip(); new_=self.fields["new"].text().strip()
         if not all([vid,cur,new_]): show(self.out,"All fields required."); return
+        if not _require_ganache_account(self.out, "Current owner address", cur): return
+        if not _require_ganache_account(self.out, "New owner address", new_): return
+        if cur.lower() == new_.lower(): show(self.out,"Error: New owner must be different from current owner."); return
         show(self.out,"Sending transaction…"); QApplication.processEvents()
-        def fn(): return transfer_ownership(vid,new_,current_owner_address=cur)
+        def fn(): return bc.transfer_ownership(vid,new_,current_owner_address=cur)
         self._w=Worker(fn)
-        self._w.result.connect(lambda tx: (log_action("TRANSFER",vid,cur,str(tx),w3.eth.block_number,f"to {new_}"),
-            show(self.out,f"Ownership transferred.\n\n  Vehicle ID    : {vid}\n  Previous Owner: {cur}\n  New Owner     : {new_}\n  TX Hash       : {tx}\n  Block #       : {w3.eth.block_number}\n\n  This transfer is permanently recorded and cannot be reversed.")))
-        self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
+        self._w.result.connect(lambda tx: (log_action("TRANSFER",vid,cur,str(tx),_safe_block_number(),f"to {new_}"),
+            show(self.out,f"Ownership transferred.\n\n  Vehicle ID    : {vid}\n  Previous Owner: {cur}\n  New Owner     : {new_}\n  TX Hash       : {tx}\n  Block #       : {_safe_block_number()}\n\n  This transfer is permanently recorded and cannot be reversed.")))
+        self._w.error.connect(lambda e: show(self.out,f"Error: {_format_error(e)}")); self._w.start()
 
 
 class VerifyPanel(QWidget):
@@ -540,7 +645,9 @@ class VerifyPanel(QWidget):
     def go(self):
         vid=self.fields["vid"].text().strip()
         if not vid: show(self.out,"Enter a vehicle ID."); return
-        def fn(): return verify_owner(vid)
+        if not _require_blockchain(self.out, "Verify Owner"):
+            return
+        def fn(): return bc.verify_owner(vid)
         self._w=Worker(fn)
         self._w.result.connect(lambda o: (log_action("VERIFY",vid,notes=f"Owner={o}"), show(self.out,f"Current owner of '{vid}':\n\n  {o}")))
         self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
@@ -558,7 +665,9 @@ class DetailsPanel(QWidget):
     def go(self):
         vid=self.fields["vid"].text().strip()
         if not vid: show(self.out,"Enter a vehicle ID."); return
-        def fn(): return get_vehicle(vid)
+        if not _require_blockchain(self.out, "Fetch Details"):
+            return
+        def fn(): return bc.get_vehicle(vid)
         self._w=Worker(fn)
         self._w.result.connect(lambda v: show(self.out,
             f"  Vehicle ID   :  {v['vehicle_id']}\n  Brand        :  {v['brand']}\n  Model        :  {v['model']}\n  Owner        :  {v['current_owner']}\n  Registered   :  {ts(v['registered_at'])}"))
@@ -577,7 +686,9 @@ class HistoryPanel(QWidget):
     def go(self):
         vid=self.fields["vid"].text().strip()
         if not vid: show(self.out,"Enter a vehicle ID."); return
-        def fn(): return get_history(vid)
+        if not _require_blockchain(self.out, "Fetch History"):
+            return
+        def fn(): return bc.get_history(vid)
         self._w=Worker(fn)
         def display(recs):
             if not recs: show(self.out,"No history found."); return
@@ -601,6 +712,8 @@ class CertPanel(QWidget):
     def go(self):
         vid=self.fields["vid"].text().strip()
         if not vid: show(self.out,"Enter a vehicle ID."); return
+        if not _require_blockchain(self.out, "Generate PDF"):
+            return
         show(self.out,"Generating PDF…"); QApplication.processEvents()
         def fn():
             from vehiclechain.pdf_cert import generate_certificate
@@ -609,32 +722,6 @@ class CertPanel(QWidget):
         self._w=Worker(fn)
         def done(path): show(self.out,f"Certificate saved.\n\n  {path}"); os.startfile(path)
         self._w.result.connect(done); self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
-
-
-class EventsPanel(QWidget):
-    def __init__(self):
-        super().__init__(); self._running=False
-        w,lay=panel_base(); add_title(lay,"Live Events","Real-time feed of on-chain events — all updates traced via blockchain event logs")
-        self.out=result_box(h=360); self.out.append("Click Start to begin listening for on-chain events…"); lay.addWidget(self.out)
-        self.btn=action_btn("Start Listening"); self.btn.clicked.connect(self.start); lay.addWidget(self.btn,0,Qt.AlignLeft)
-        lay.addStretch(); self.setLayout(QVBoxLayout()); self.layout().addWidget(scroll_wrap(w))
-
-    def start(self):
-        if self._running: return
-        self._running=True; self.btn.setText("Listening…"); self.btn.setEnabled(False)
-        def run():
-            try:
-                c=get_contract(); rf=c.events.VehicleRegistered.create_filter(from_block="latest")
-                xf=c.events.OwnershipTransferred.create_filter(from_block="latest")
-                self.out.append(f"\n[{datetime.now():%H:%M:%S}]  Listener active.\n")
-                while self._running:
-                    for e in rf.get_new_entries():
-                        a=e["args"]; self.out.append(f"[{datetime.now():%H:%M:%S}]  REGISTERED\n  ID: {a['vehicleId']}  Owner: {a['owner']}  Block #{e['blockNumber']}\n")
-                    for e in xf.get_new_entries():
-                        a=e["args"]; self.out.append(f"[{datetime.now():%H:%M:%S}]  TRANSFERRED\n  ID: {a['vehicleId']}  From: {a['previousOwner']} to {a['newOwner']}  Block #{e['blockNumber']}\n")
-                    time.sleep(2)
-            except Exception as ex: self.out.append(f"Error: {ex}")
-        threading.Thread(target=run,daemon=True).start()
 
 
 class AuditPanel(QWidget):
@@ -674,12 +761,46 @@ class VerifierPanel(QWidget):
     def go(self):
         addr=self.fields["addr"].text().strip(); allowed=self.chk.isChecked()
         if not addr: show(self.out,"Enter a wallet address."); return
-        def fn(): return set_verifier(addr,allowed)
+        if not _require_blockchain(self.out, "Set Verifier"):
+            return
+        if not _require_address(self.out, "Verifier address", addr): return
+        def fn(): return bc.set_verifier(addr,allowed)
         self._w=Worker(fn)
         def done(tx):
-            act="GRANTED" if allowed else "REVOKED"; log_action("SET_VERIFIER",notes=f"{act} {addr}")
-            show(self.out,f"Verifier {act}.\n\n  Address : {addr}\n  TX Hash : {tx}\n  Block # : {w3.eth.block_number}")
-        self._w.result.connect(done); self._w.error.connect(lambda e: show(self.out,f"Error: {e}")); self._w.start()
+            act="GRANTED" if allowed else "REVOKED"; log_action("SET_VERIFIER",tx_hash=tx,notes=f"{act} {addr}")
+            show(self.out,f"Verifier {act}.\n\n  Address : {addr}\n  TX Hash : {tx}\n  Block # : {_safe_block_number()}")
+        self._w.result.connect(done); self._w.error.connect(lambda e: show(self.out,f"Error: {_format_error(e)}")); self._w.start()
+
+
+class VerifierConfirmPanel(QWidget):
+    def __init__(self):
+        super().__init__(); self.fields={}
+        w,lay=panel_base(); add_title(lay,"Verifier Confirmation","Authorized verifiers can create audit trails by confirming vehicle ownership")
+        info=QWidget(); info.setObjectName("card"); iv=QVBoxLayout(info)
+        t=QLabel("Create Audit Trail"); t.setStyleSheet("color:#C62828;font-size:14px;font-weight:700;"); iv.addWidget(t)
+        d=QLabel("Only authorized verifiers can call this function.\nIt creates an immutable OwnershipVerified event on the blockchain.\nThe current owner address and timestamp are permanently recorded.\nThis provides transparent proof of verification for third-party systems.")
+        d.setStyleSheet("color:#78909C;font-size:13px;"); d.setWordWrap(True); iv.addWidget(d); lay.addWidget(info)
+        add_field(lay,"Vehicle ID","e.g. CAR001",self.fields,"vid")
+        add_field(lay,"Your Verifier Address","0x… wallet address",self.fields,"addr")
+        self.out=result_box(h=120); lay.addWidget(self.out)
+        b=action_btn("Confirm Ownership"); b.clicked.connect(self.go); lay.addWidget(b,0,Qt.AlignLeft)
+        lay.addStretch(); self.setLayout(QVBoxLayout()); self.layout().addWidget(scroll_wrap(w))
+
+    def go(self):
+        vid=self.fields["vid"].text().strip(); addr=self.fields["addr"].text().strip()
+        if not vid: show(self.out,"Enter a vehicle ID."); return
+        if not addr: show(self.out,"Enter your verifier address."); return
+        if not _require_blockchain(self.out, "Verify Ownership"):
+            return
+        if not _require_vehicle_id(self.out, vid): return
+        if not _require_ganache_account(self.out, "Verifier address", addr): return
+        def fn(): return bc.verify_ownership_by_verifier(vid,addr)
+        self._w=Worker(fn)
+        def done(result):
+            owner, tx_hash = result
+            log_action("VERIFIER_CONFIRM",vid,tx_hash=tx_hash,notes=f"Verifier={addr}, Owner={owner}")
+            show(self.out,f"✓ Verification confirmed and recorded.\n\n  Vehicle ID : {vid}\n  Owner      : {owner}\n  Verifier   : {addr}\n  TX Hash    : {tx_hash[:16]}…\n  Block #    : {_safe_block_number()}")
+        self._w.result.connect(done); self._w.error.connect(lambda e: show(self.out,f"Error: {_format_error(e)}")); self._w.start()
 
 
 class MainWindow(QMainWindow):
@@ -735,9 +856,9 @@ class MainWindow(QMainWindow):
             ("Vehicle Details",    DetailsPanel()),
             ("Ownership History",  HistoryPanel()),
             ("PDF Certificate",    CertPanel()),
-            ("Live Events",        EventsPanel()),
             ("Audit Log",          AuditPanel()),
             ("Set Verifier",       VerifierPanel()),
+            ("Verifier Confirmation", VerifierConfirmPanel()),
         ]
         self._nav=[]
         for i,(label,panel) in enumerate(panels):
@@ -787,22 +908,30 @@ class MainWindow(QMainWindow):
         def run():
             while True:
                 try:
-                    ok=w3.is_connected()
-                    block=w3.eth.block_number if ok else "—"
-                    if ok:
-                        self.status_lbl.setText(f"Connected, block #{block}")
-                        self.status_lbl.setStyleSheet(
-                            "color:#137333;font-size:11px;font-weight:500;padding:8px 12px;"
-                            "background:#FFFFFF;border-radius:10px;border:1px solid #CEEAD6;"
-                            "margin:6px 8px 4px 8px;"
-                        )
-                    else:
-                        self.status_lbl.setText("Disconnected from Ganache")
+                    if bc is None:
+                        self.status_lbl.setText("Blockchain unavailable")
                         self.status_lbl.setStyleSheet(
                             "color:#C5221F;font-size:11px;font-weight:500;padding:8px 12px;"
                             "background:#FFFFFF;border-radius:10px;border:1px solid #FAD2CF;"
                             "margin:6px 8px 4px 8px;"
                         )
+                    else:
+                        ok = bc.w3.is_connected()
+                        block = bc.w3.eth.block_number if ok else "—"
+                        if ok:
+                            self.status_lbl.setText(f"Connected, block #{block}")
+                            self.status_lbl.setStyleSheet(
+                                "color:#137333;font-size:11px;font-weight:500;padding:8px 12px;"
+                                "background:#FFFFFF;border-radius:10px;border:1px solid #CEEAD6;"
+                                "margin:6px 8px 4px 8px;"
+                            )
+                        else:
+                            self.status_lbl.setText("Disconnected from Ganache")
+                            self.status_lbl.setStyleSheet(
+                                "color:#C5221F;font-size:11px;font-weight:500;padding:8px 12px;"
+                                "background:#FFFFFF;border-radius:10px;border:1px solid #FAD2CF;"
+                                "margin:6px 8px 4px 8px;"
+                            )
                 except Exception:
                     self.status_lbl.setText("Network error")
                     self.status_lbl.setStyleSheet(

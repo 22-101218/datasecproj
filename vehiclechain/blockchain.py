@@ -38,6 +38,15 @@ def get_authority_address() -> str:
     return authority_address
 
 
+def is_valid_ganache_account(address: str) -> bool:
+    """Check if address is one of the unlocked Ganache accounts."""
+    try:
+        checksum_addr = Web3.to_checksum_address(address)
+        return checksum_addr in w3.eth.accounts
+    except Exception:
+        return False
+
+
 def compile_contract() -> tuple[List[Dict[str, Any]], str]:
     install_solc(SOLC_VERSION)
     source = CONTRACT_PATH.read_text(encoding="utf-8")
@@ -67,7 +76,7 @@ def _get_compiled_artifacts() -> tuple[List[Dict[str, Any]], str]:
     return _contract_abi, _contract_bytecode
 
 
-def deploy_contract() -> str:
+def deploy_contract() -> tuple[str, str]:
     global _contract_address, _contract_instance
     abi, bytecode = _get_compiled_artifacts()
     contract = w3.eth.contract(abi=abi, bytecode=bytecode)
@@ -91,7 +100,7 @@ def deploy_contract() -> str:
         address=Web3.to_checksum_address(_contract_address),
         abi=abi,
     )
-    return _contract_address
+    return _contract_address, tx_hash.hex()
 
 
 def get_contract() -> Contract:
@@ -203,3 +212,19 @@ def get_history(vehicle_id: str) -> List[Dict[str, Any]]:
     contract = get_contract()
     rows = contract.functions.getOwnershipHistory(vehicle_id).call()
     return [{"owner": row[0], "transferred_at": row[1]} for row in rows]
+
+
+def verify_ownership_by_verifier(
+    vehicle_id: str,
+    verifier_address: str,
+    verifier_private_key: str | None = None,
+) -> tuple[str, str]:
+    """Call verifyOwnershipByVerifier as a verifier to create audit trail. Returns (owner, tx_hash)."""
+    contract = get_contract()
+    tx_hash = _send_owner_tx(
+        contract.functions.verifyOwnershipByVerifier(vehicle_id),
+        verifier_private_key,
+        verifier_address,
+    )
+    owner = verify_owner(vehicle_id)
+    return owner, tx_hash

@@ -1,179 +1,337 @@
-# 🚗 VehicleChain — Blockchain Vehicle Ownership System
+# VehicleChain - Blockchain Vehicle Ownership System
 
-A full-stack desktop application for managing vehicle ownership on the Ethereum blockchain. Built with Python, Solidity, and PyQt5, it provides a modern GUI, PDF certificate generation, VIN validation, CSV audit logging, and real-time event monitoring — all backed by a local Ganache blockchain.
+A secure, transparent blockchain-based vehicle ownership and transfer management system built on Ethereum (Ganache).
 
----
+## Overview
 
-## ✨ Features
+VehicleChain is a decentralized application that leverages smart contracts to create an immutable, verifiable record of vehicle ownership. The system enables transparent ownership transfers, authorized verification, and comprehensive audit trails on the blockchain.
 
-| Feature | Description |
-|---|---|
-| 🔗 **Blockchain Registry** | Register vehicles and transfer ownership via a Solidity smart contract |
-| 🖥️ **Desktop GUI** | Full PyQt5 interface with a futuristic dark/violet theme |
-| 📄 **PDF Certificates** | Auto-generate ownership certificates with QR code and branding |
-| 🔍 **VIN Validator** | Validates real 17-character VINs or custom vehicle IDs |
-| 📋 **Audit Log** | Every action is recorded to `audit_log.csv` automatically |
-| ⚡ **Live Event Feed** | Real-time blockchain event listener in the GUI |
-| 🔐 **Role-Based Access** | Authority and Verifier roles enforced on-chain |
-| 🏠 **Ownership History** | Immutable on-chain timeline of all past owners |
+## Features
 
----
+- **Blockchain-based Registration**: Permanently record vehicle ownership on the blockchain
+- **Ownership Transfers**: Securely transfer vehicle ownership between authorized parties
+- **Ownership Verification**: Public verification of current vehicle owner at any time
+- **Ownership History**: Complete, immutable record of all ownership transfers with timestamps
+- **Role-based Access Control**: Authority, Owner, and Verifier roles with specific permissions
+- **Verifier Confirmation**: Trusted third-parties create audit trails for regulatory compliance
+- **PDF Certificates**: Generate printable blockchain-verified ownership certificates with QR codes
+- **Audit Logging**: Every action logged with transaction hash, block number, and timestamp
+- **Dual Interface**: Both GUI and CLI applications for flexible workflow integration
 
-## 🗂️ Project Structure
+## System Architecture
 
-```
-datasecproj/
-│
-├── contracts/
-│   └── VehicleOwnership.sol      # Solidity smart contract (Solidity ^0.8.19)
-│
-├── vehiclechain/                 # Main Python package
-│   ├── __main__.py               # Entry point (python -m vehiclechain)
-│   ├── gui.py                    # PyQt5 desktop GUI
-│   ├── cli.py                    # Terminal CLI menu
-│   ├── blockchain.py             # Web3.py + contract interaction helpers
-│   ├── pdf_cert.py               # PDF certificate generator (ReportLab + QR)
-│   ├── audit_log.py              # CSV audit logging
-│   ├── vin_utils.py              # VIN validation logic
-│   └── paths.py                  # Path resolution for bundled/dev environments
-│
-├── VehicleOwnershipSystem/       # Original base project
-│   ├── contracts/VehicleOwnership.sol
-│   ├── main.py
-│   └── requirements.txt
-│
-├── assets/
-│   ├── car_logo.png              # App logo (GUI + PDF)
-│   └── car_logo.ico              # Windows icon
-│
-├── app.py                        # Shortcut: launches the CLI
-├── requirements.txt              # Python dependencies
-├── VehicleChain.spec             # PyInstaller build config
-└── README.md
-```
+### Smart Contract (Solidity)
 
----
+**File**: `contracts/VehicleOwnership.sol`
 
-## ⚙️ Prerequisites
+The smart contract implements:
+- Vehicle registration and storage
+- Ownership transfer logic
+- Role-based access control
+- Event logging for transparency
+- Ownership history tracking
 
-- **Python 3.10+**
-- **[Ganache](https://trufflesuite.com/ganache/)** — local Ethereum blockchain (GUI or CLI)
-- **Node.js** (only needed if using Truffle/Hardhat for contract deployment)
+### Backend (Python)
 
----
+**File**: `vehiclechain/blockchain.py`
 
-## 🚀 Setup & Installation
+Provides blockchain abstraction layer with functions for:
+- Contract deployment
+- Vehicle registration
+- Ownership transfers
+- Verification queries
+- History retrieval
 
-### 1. Clone the repository
+### Applications
+
+**GUI Application**: `vehiclechain/gui.py`
+- PyQt5-based graphical interface
+- 11 feature panels for all operations
+- Real-time blockchain connection status
+- Interactive forms and result displays
+
+**CLI Application**: `vehiclechain/cli.py`
+- Terminal-based menu interface
+- 9 operational options
+- Scriptable for automation
+- Clean output formatting
+
+## Requirements
+
+- Python 3.10 or higher
+- Ganache CLI (v7.x or higher) running locally at http://127.0.0.1:7545
+- For GUI: PyQt5 6.x
+- Solidity compiler (via solcx, installed automatically)
+- Web3.py 6.x
+- Additional dependencies in requirements.txt
+
+## Installation
+
+1. Clone the repository
 ```bash
-git clone https://github.com/22-101218/datasecproj.git
-cd datasecproj
+git clone <repository-url>
+cd datasec
 ```
 
-### 2. Install Python dependencies
+2. Create a Python virtual environment (recommended)
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Start Ganache
-Launch **Ganache** and ensure it is running on:
-```
-http://127.0.0.1:7545
-```
-
----
-
-## ▶️ Running the App
-
-### GUI (Recommended)
+4. Start Ganache (in a separate terminal)
 ```bash
-python -m vehiclechain
+ganache --deterministic
 ```
 
-### CLI (Terminal menu)
+The default setup uses Ganache's deterministic mode with fixed accounts for consistent testing.
+
+## Quick Start
+
+### GUI Application
+
+Run the graphical interface:
 ```bash
-python app.py
+python -m vehiclechain gui
 ```
 
----
-
-## 🖥️ GUI Panels
-
-| Panel | Description |
-|---|---|
-| **Dashboard** | Live block number, connection status, and available accounts |
-| **Deploy Contract** | Compile and deploy the smart contract with one click |
-| **Register Vehicle** | Register a new vehicle using a real VIN or custom ID |
-| **Transfer Ownership** | Securely transfer a vehicle to a new owner (owner-only) |
-| **Verify Owner** | Public lookup of current owner by vehicle ID |
-| **Vehicle Details** | Full vehicle info card (brand, model, owner, timestamp) |
-| **Ownership History** | Complete immutable transfer history from the blockchain |
-| **PDF Certificate** | Generate a signed PDF ownership certificate with QR code |
-| **Live Events** | Real-time feed of blockchain events as they happen |
-| **Audit Log** | View all logged actions from `audit_log.csv` |
-| **Set Verifier** | Grant or revoke the verifier role for an address |
-
----
-
-## 📜 Smart Contract Overview
-
-**`contracts/VehicleOwnership.sol`** — Solidity `^0.8.19`
-
-### Key Roles
-- **Authority** — the deploying address; can register vehicles and manage verifiers
-- **Verifier** — can call `verifyOwnershipByVerifier()` and emit a verification event
-
-### Core Functions
-
-| Function | Access | Description |
-|---|---|---|
-| `registerVehicle(id, brand, model, owner)` | Authority only | Register a new vehicle |
-| `transferOwnership(id, newOwner)` | Current owner only | Transfer to new owner |
-| `verifyCurrentOwner(id)` | Public (view) | Returns current owner address |
-| `verifyOwnershipByVerifier(id)` | Verifier only | Emits `OwnershipVerified` event |
-| `getVehicle(id)` | Public (view) | Returns full vehicle details |
-| `getOwnershipHistory(id)` | Public (view) | Returns all past owner records |
-| `setVerifier(address, bool)` | Authority only | Grant/revoke verifier role |
-
-### Events
-- `VehicleRegistered`
-- `OwnershipTransferred`
-- `OwnershipVerified`
-- `VerifierUpdated`
-
----
-
-## 📦 Dependencies
-
-```
-web3==6.20.2
-py-solc-x==2.0.3
-PyQt5
-reportlab
-qrcode[pil]
-Pillow
-pyinstaller>=6.0
+Or execute the compiled executable:
+```bash
+dist/VehicleChain.exe
 ```
 
----
+### CLI Application
 
-## 🏗️ Building the Windows Executable
-
-```powershell
-pip install pyinstaller
-pyinstaller --noconfirm VehicleChain.spec
+Run the text-based menu:
+```bash
+python -m vehiclechain cli
 ```
 
-Output: `dist\VehicleChain.exe`
+## Basic Workflow
 
-> Make sure Ganache is running on `http://127.0.0.1:7545` before launching the `.exe`.
+### 1. Deploy Smart Contract
 
-**Generated files (same folder as the executable):**
-- `audit_log.csv` — CSV log of all actions
-- `certificate_<vehicleId>.pdf` — PDF ownership certificates
+1. Start Ganache (listen on port 7545)
+2. Launch the application (GUI or CLI)
+3. Select "Deploy Contract"
+4. Wait for deployment confirmation
+5. Note: Contract deployed to a specific address
 
----
+### 2. Register a Vehicle
 
-## 📄 License
+1. Navigate to "Register Vehicle" panel
+2. Enter Vehicle ID (VIN or custom format)
+3. Enter Brand and Model
+4. Enter Owner wallet address (must be Ganache account)
+5. Submit - transaction recorded on blockchain
 
-This project was developed as an academic submission. All rights reserved.
+### 3. Transfer Ownership
+
+1. Navigate to "Transfer Ownership" panel
+2. Enter Vehicle ID
+3. Enter Current Owner address
+4. Enter New Owner address (must be Ganache account)
+5. Submit - immutable transfer record created
+
+### 4. Verify Current Owner
+
+1. Navigate to "Verify Owner" panel
+2. Enter Vehicle ID
+3. View current owner address - public query, no permission required
+
+### 5. View Ownership History
+
+1. Navigate to "Ownership History" panel
+2. Enter Vehicle ID
+3. Review all transfers with timestamps
+
+### 6. Generate Certificate
+
+1. Navigate to "PDF Certificate" panel
+2. Enter Vehicle ID
+3. Certificate generated with:
+   - Current owner
+   - Ownership history
+   - QR code linking to blockchain proof
+   - Blockchain verification details
+
+### 7. Set Verifier Role
+
+1. Navigate to "Set Verifier" panel (Authority only)
+2. Enter verifier wallet address
+3. Toggle "Grant Access" checkbox
+4. Submit - verifier role granted or revoked
+
+### 8. Verifier Confirmation
+
+1. Navigate to "Verifier Confirmation" panel (Verifier only)
+2. Enter Vehicle ID
+3. Enter Your Verifier Address
+4. Submit - creates immutable OwnershipVerified event on blockchain
+
+## Roles and Permissions
+
+### Authority
+
+- Deploys smart contract
+- Registers new vehicles
+- Grants/revokes verifier role
+- Automatic: First Ganache account (0xabc...)
+
+### Vehicle Owner
+
+- Transfers ownership to new owner
+- Must be wallet holding vehicle ownership
+- Verified on-chain before transfer
+
+### Verifier
+
+- Creates official verification records
+- Must be explicitly authorized by Authority
+- Generates immutable OwnershipVerified events
+- Public audit trail for third-party systems
+
+### Any User
+
+- Verify current owner (public read)
+- View ownership history
+- Generate certificates
+- View audit logs
+
+## Audit Log
+
+Every blockchain action is logged to `audit_log.csv` with:
+
+- Timestamp (YYYY-MM-DD HH:MM:SS)
+- Action type (DEPLOY, REGISTER, TRANSFER, VERIFY, SET_VERIFIER, VERIFIER_CONFIRM)
+- Vehicle ID
+- Actor address
+- Transaction hash
+- Block number
+- Additional notes
+
+Location:
+- Development: Project root directory
+- Packaged: Same directory as VehicleChain.exe
+
+## Technical Details
+
+### Smart Contract Events
+
+The contract emits the following events:
+
+- **VehicleRegistered**: Fired on new vehicle registration
+- **OwnershipTransferred**: Fired on ownership transfer
+- **OwnershipVerified**: Fired when verifier confirms ownership
+- **VerifierRoleChanged**: Fired on verifier role grant/revoke
+
+### Data Persistence
+
+- Contract state: Stored on Ganache blockchain
+- Audit log: CSV file for local record-keeping
+- Application state: Dynamically queried from blockchain
+
+### Error Handling
+
+The application includes comprehensive error handling for:
+- Ganache disconnection
+- Invalid addresses
+- Non-existent Ganache accounts
+- Transaction failures
+- Network errors
+- Input validation
+
+## Development
+
+### Project Structure
+
+```
+vehiclechain/
+  __main__.py           - Application entry point
+  blockchain.py         - Blockchain abstraction layer
+  gui.py               - PyQt5 GUI application
+  cli.py               - CLI menu application
+  vin_utils.py         - Vehicle ID validation
+  audit_log.py         - Audit logging
+  pdf_cert.py          - PDF certificate generation
+  paths.py             - Path utilities
+
+contracts/
+  VehicleOwnership.sol - Smart contract
+
+assets/
+  car_logo.ico         - Application icon
+  car_logo.png         - Logo image
+
+requirements.txt       - Python dependencies
+VehicleChain.spec      - PyInstaller build configuration
+```
+
+### Building Executable
+
+To rebuild the Windows executable:
+
+```bash
+pyinstaller VehicleChain.spec
+```
+
+Output: `dist/VehicleChain.exe`
+
+## Troubleshooting
+
+### "Unable to connect to Ganache"
+
+- Ensure Ganache is running: `ganache --deterministic`
+- Verify connection URL: http://127.0.0.1:7545
+- Check firewall settings
+
+### "Sender account not recognized"
+
+- Address is not a valid Ganache account
+- Import address into Ganache or use an existing account
+- Use first account (0x) for authority operations
+
+### "Insufficient funds for gas"
+
+- Account has insufficient balance
+- Ganache provides starting balance - check account history
+- Use fresh Ganache instance if needed
+
+### Application crashes on startup
+
+- Check Python version: 3.10+
+- Verify all dependencies installed: `pip install -r requirements.txt`
+- Check file permissions, especially in OneDrive directories
+
+### Certificate generation fails
+
+- Check if reportlab is installed: `pip install reportlab`
+- Verify vehicle ID exists and has history
+- Check disk space for PDF output
+
+## License
+
+This project is provided for educational and research purposes.
+
+## Support
+
+For issues or questions:
+1. Check the troubleshooting section above
+2. Review audit logs for detailed transaction information
+3. Verify Ganache connection status
+4. Check input validation messages
+
+## Requirements Compliance
+
+This system fully implements:
+
+- **Requirement 6**: Role-based access control (Authority, Owner, Verifier)
+- **Requirement 7**: Ownership verification process (public verify + history)
+- **Requirement 8**: Immutability and transparency (blockchain-stored records + audit trail)
+
+All data is permanently recorded on the blockchain with no modification or deletion capabilities.
